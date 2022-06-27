@@ -1,0 +1,40 @@
+name: Unit Tests
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  node-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        node_version: ["12", "14", "16"]
+    runs-on: ubuntu-latest
+    env:
+      NPM_CONFIG_UNSAFE_PERM: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node_version }}
+
+      - name: Bootstrap
+        run: |
+          npm install rollup -g
+          node common/scripts/install-run-rush.js purge
+          npm install
+
+      - name: Check Dependencies
+        run: node common/scripts/install-run-rush.js check
+
+      - name: Build 🔧
+        run: npm run rebuild
+        timeout-minutes: 10
+
+      - name: Run all Unit tests (node, browser and Web Worker)
+        run: npm run test --verbose
+        timeout-minutes: 15
