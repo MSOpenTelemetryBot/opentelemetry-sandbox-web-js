@@ -1,0 +1,179 @@
+name: '[SimpleTest] Auto Merge from master OTel JS repos'
+
+on:
+  workflow_dispatch:
+
+# on:
+#   push:
+#     branches: [ MSNev/AutoMerge ]
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+        
+    steps:
+      - uses: actions/checkout@v3
+        env:
+          # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+
+      # - name: Set git user
+      #   run: |
+      #     git config -l --local
+      #     # TODO update with your bot account info
+      #     git config user.name opentelemetrybot
+      #     git config user.email 107717825+opentelemetrybot@users.noreply.github.com
+      #     git status
+      #     git remote -v
+
+      # - name: Clone the current origin/destination repo/branch to a folder mergeRepo
+      #   env:
+      #     # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+      #     GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+      #   run: |
+      #     pwd
+      #     git clone https://github.com/MSNev/opentelemetry-sandbox-web-js.git mergeRepo/ -b auto-merge/merge-main
+      #     git status
+      #     git remote -v
+
+      # - name: Move to clone in mergeRepo and set user and source origin to source / dest repo (won't be the fork for real)
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git status
+      #     git remote -v
+      #     git config user.name opentelemetrybot
+      #     git config user.email 107717825+opentelemetrybot@users.noreply.github.com
+      #     git checkout -b auto-merge/repo-sync-test-staging origin/auto-merge/merge-main
+
+      - name: Create branch and set user and source origin to source / dest repo (won't be the fork for real)
+        run: |
+          pwd
+          git status
+          git remote -v
+          git config user.name opentelemetrybot
+          git config user.email 107717825+opentelemetrybot@users.noreply.github.com
+          git config -l --local
+          git fetch
+          git checkout -b auto-merge/repo-sync-test-staging origin/auto-merge/merge-main
+
+      # - name: Remove and commit potential conflicts
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git rm LICENSE
+      #     git rm README.md
+      #     git status
+      #     git commit -m "Remote Potential Conflicting files"
+
+      # - name: Add and fetch remote repo/branch from the "master" remote repo that we want to merge into this repo
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git remote add otel-js https://github.com/open-telemetry/opentelemetry-js -t main
+      #     git fetch otel-js --tags --progress
+      #     git status
+
+      # - name: Create temporary local branch used to "merge" changes from "master" remote repo into this repo
+      #        # (only doing initial merge to v0.1.0 tag)
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git checkout --progress -B auto-merge/otel-js v0.1.0
+      #     git reset --hard
+      #     git status
+
+      # - name:  Merge the remote values into this branch
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git merge --allow-unrelated-histories --no-commit -X theirs --progress --no-edit auto-merge/otel-js
+      #     git status
+
+      # - name: Commit Merge changes from the remote values into this branch
+      #   run: |
+      #     git commit -m "Merged changes"
+
+      # - name: Remove remote from this branch
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git remote remove otel-js
+      #     git status
+
+      # - name: Merging auto-merge/otel-js to merge master, switching back to staging
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git status
+      #     git checkout auto-merge/repo-sync-test-staging
+      #     git merge --allow-unrelated-histories --no-commit -X theirs --progress --no-ff --no-edit auto-merge/otel-js
+      #     git status
+
+      # - name: Move the project to folder
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     ls -al
+      #     mkdir -p auto-merge/js
+      #     git mv --force --verbose .circleci/ auto-merge/js/.circle.ci/
+      #     git mv --force --verbose .github/ auto-merge/js/.github/
+      #     git mv --force --verbose doc/ auto-merge/js/doc/
+      #     git mv --force --verbose examples/ auto-merge/js/examples/
+      #     git mv --force --verbose packages/ auto-merge/js/packages/
+      #     git mv --force --verbose .commitlintrc.yml auto-merge/js/.commitlintrc.yml
+      #     git mv --force --verbose .editorconfig auto-merge/js/.editorconfig
+      #     git mv --force --verbose .gitignore auto-merge/js/.gitignore
+      #     git mv --force --verbose .npmignore auto-merge/js/.npmignore
+      #     git mv --force --verbose .nycrc auto-merge/js/.nycrc
+      #     git mv --force --verbose CONTRIBUTING.md auto-merge/js/CONTRIBUTING.md
+      #     git mv --force --verbose LICENSE auto-merge/js/LICENSE
+      #     git mv --force --verbose README.md auto-merge/js/README.md
+      #     git mv --force --verbose codecov.yml auto-merge/js/codecov.yml
+      #     git mv --force --verbose karma.base.js auto-merge/js/karma.base.js
+      #     git mv --force --verbose lerna.json auto-merge/js/lerna.json
+      #     git mv --force --verbose package.json auto-merge/js/package.json
+      #     git mv --force --verbose tslint.base.js auto-merge/js/tslint.base.js
+      #     git mv --force --verbose webpack.node-polyfills.js auto-merge/js/webpack.node-polyfills.js
+      #     git commit -m "Moved the project to sub-folder"
+
+      # - name: Cleanup temporary local branches
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git branch -D auto-merge/otel-js
+
+      # - name: Push changes
+      #   env:
+      #     # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+      #     GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+      #   run: |
+      #     cd mergeRepo
+      #     pwd
+      #     git status
+      #     git remote -v
+      #     git config -l --local
+      #     git config gc.auto 0
+      #     git config -l --local
+      #     git config http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+      #     git config -l --local
+      #     git push -f --set-upstream origin auto-merge/repo-sync-test-staging
+
+      - name: Push changes from current
+        env:
+          # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          pwd
+          git status
+          git remote -v
+          git config -l --local
+          git config gc.auto 0
+          git config -l --local
+          git config http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+          git config -l --local
+          git push -f --set-upstream origin auto-merge/repo-sync-test-staging
+
+      - name: Create PR to merge the staging branch into the auto-merge/merge-main merge "master" branch
+        run: |
+          gh pr create --title SimpleTest --full --repo https://github.com/MSNev/opentelemetry-sandbox-web-js.git --base auto-merge/merge-main

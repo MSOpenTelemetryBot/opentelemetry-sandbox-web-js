@@ -1,0 +1,96 @@
+name: '[CloneTest - Pat head] Auto Merge from master OTel JS repos'
+
+on:
+  workflow_dispatch:
+
+# on:
+#   push:
+#     branches: [ MSNev/AutoMerge ]
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+        
+    steps:
+      - uses: actions/checkout@v3
+        env:
+          # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+
+      - name: Create branch and set user and source origin to source / dest repo (won't be the fork for real)
+        env:
+          # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          pwd
+          git status
+          git remote -v
+          git config user.name MSOpenTelemetryBot
+          git config user.email 109319285+MSOpenTelemetryBot@users.noreply.github.com
+          git config -l
+          git fetch
+          echo == ls =============================================
+          ls -al
+          echo == ls .git/ =======================================
+          ls .git/ -al
+          echo == config =========================================
+          cat .git/config
+          echo ===============================================
+          git clone https://"$GITHUB_TOKEN"@github.com/MSNev/opentelemetry-sandbox-web-js mergeRepo/ -b auto-merge/merge-main
+          cd mergeRepo
+          pwd
+          git checkout -b auto-merge/repo-sync-clone-pat-head-test-staging origin/auto-merge/merge-main
+          echo ---------------------------
+          git config -l
+          echo -- Setting user to MSOpenTelemetryBot -------------------------
+          git config user.name MSOpenTelemetryBot
+          git config user.email 109319285+MSOpenTelemetryBot@users.noreply.github.com
+          git config gc.auto 0
+          echo == ls =============================================
+          ls -al
+          echo == ls .git/ =======================================
+          ls .git/ -al
+          echo == config =========================================
+          cat .git/config
+          echo ===============================================
+          git config -l
+          echo ---------------------------
+
+      - name: Push changes from current
+        env:
+          # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          cd mergeRepo
+          pwd
+          echo "Hello" > ug.txt
+          git add ug.txt
+          git commit -m "Test"
+          git status
+          git remote -v
+          echo ---------------------------
+          git config -l --local
+          echo ---------------------------
+          git config -l
+          echo ---------------------------
+          git remote add bot https://github.com/MSOpenTelemetryBot/opentelemetry-sandbox-web-js
+          git push -f --set-upstream bot HEAD:auto-merge/repo-sync-clone-pat-head-test-staging
+
+      # - name: Push changes from current
+      #   env:
+      #     # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+      #     GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+      #   run: |
+      #     pwd
+      #     git status
+      #     git remote -v
+      #     git config -l --local
+      #     git config gc.auto 0
+      #     git config -l --local
+      #     git config http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+      #     git config -l --local
+      #     git push -f --set-upstream origin auto-merge/repo-sync-test-staging
+
+      # - name: Create PR to merge the staging branch into the auto-merge/merge-main merge "master" branch
+      #   run: |
+      #     gh pr create --title SimpleTest --full --repo https://github.com/MSNev/opentelemetry-sandbox-web-js.git --base auto-merge/merge-main

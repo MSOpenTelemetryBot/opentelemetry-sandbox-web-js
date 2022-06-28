@@ -1,0 +1,29 @@
+name: '[Auto Merge] Merge master OTel JS repos to merge-staging'
+
+# on:
+#   workflow_dispatch:
+
+on:
+  push:
+    branches: [ MSNev/AutoMerge ]
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+        
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: MSNev/opentelemetry-sandbox-web-js
+          token: ${{ secrets.BOT_TOKEN }}
+          
+      - name: Use CLA approved github bot
+        run: |
+          # TODO update with your bot account info
+          git config user.name MSOpenTelemetryBot
+          git config user.email 109319285+MSOpenTelemetryBot@users.noreply.github.com       
+      - name: Merge changes from JS and JS-API repos
+        env:
+          # not using secrets.GITHUB_TOKEN since pull requests from that token do not run workflows
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: npm run do-sandbox-repo-merge
