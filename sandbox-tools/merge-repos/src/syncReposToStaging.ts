@@ -30,15 +30,15 @@ import { isIgnoreFolder } from "./isIgnoreFolder";
 import { renameTags } from "./renameTags";
 import { pushToBranch } from "./pushToBranch.ts";
 import { createLocalBranch } from "./createLocalBranch";
-import { createPullRequest } from "./github";
+import { createPullRequest, gitHubCreateForkRepo } from "./github";
 import { checkPrExists } from "./checkPrExists";
 import { parseArgs, ParsedOptions, SwitchBase } from "./parseArgs";
+import { getUser, setUser } from "./userDetails";
 
 interface SyncRepoToStagingOptions extends SwitchBase {
     cloneTo: string;
     originRepo: string;
     originBranch: string;
-    destBranch?: string;
 }
 
 const _gitRoot = findCurrentRepoRoot();
@@ -71,10 +71,9 @@ function showHelp() {
     }
 
     console.log("");
-    console.log(scriptName + " [-cloneTo <...>][-destBranch <...>][-originBranch <...>][-originRepo <...>]");
+    console.log(scriptName + " [-cloneTo <...>][-originBranch <...>][-originRepo <...>]");
     console.log("".padEnd(99, "-"));
     console.log(formatIndentLines(25, ` -cloneTo <location>    - The working location of where to clone the original repo, defaults to \"${MERGE_CLONE_LOCATION}\"`, 99));
-    console.log(formatIndentLines(25, ` -destBranch <branch>   - Identifies name of the destination branch when the merged changes will be pushed, defaults to the value of the originBranch.`, 99));
     console.log(formatIndentLines(25, ` -originBranch <branch> - Identifies both the initial source and final destination branch for the merge, defaults to \"${MERGE_ORIGIN_STAGING_BRANCH}\"`, 99));
     console.log(formatIndentLines(25, ` -originRepo <repo>     - This identifies both the initial source and the final destination for the merge, defaults to \"${MERGE_ORIGIN_REPO}\"`, 99));
 
@@ -107,7 +106,24 @@ async function _init(localGit: SimpleGit, originRepo: string, originBranch: stri
     _mergeGitRoot = path.resolve(_gitRoot, _theArgs.switches.cloneTo).replace(/\\/g, "/");
     log(`MergeRoot: ${_mergeGitRoot}`);
 
-    let mergeGit = await createLocalBranch(localGit, _mergeGitRoot, originRepo, originBranch, workingBranch);
+    const repoTokens = originRepo.split("/");
+    if (repoTokens.length !== 2) {
+        fail(localGit, `${originRepo} must be in the format <owner>/<repo-name>`);
+    }
+
+    const repoName = repoTokens[1];
+
+    let userDetails = await getUser(localGit);
+    let destUser = userDetails.name;
+    if (!destUser || destUser.indexOf(" ") !== -1) {
+        destUser = userDetails.user;
+    }
+
+    // Make sure the user has forked the repo and if not create one
+    await gitHubCreateForkRepo(_gitRoot, originRepo);
+
+    // Now lets go and create a local repo
+    let mergeGit = await createLocalBranch(localGit, _mergeGitRoot, originRepo, originBranch, destUser, repoName, workingBranch, userDetails);
 
     await removeTemporaryRemotes(mergeGit, reposToSyncAndMerge);
     await removePotentialMergeConflicts(mergeGit, reposToSyncAndMerge, _mergeGitRoot);
@@ -519,20 +535,19 @@ async function moveRepoTo(git: SimpleGit, baseFolder: string, srcFolder: string,
  * Merge the temporary local "merge" (used to merge the original master repos into this repo) branch into the final staging
  * merge branch.
  * @param git 
- * @param srcBranch 
  * @param destBranch 
  * @param details 
  * @returns 
  */
-async function mergeBranchToMergeMaster(git: SimpleGit, srcBranch: string, destBranch: string, details: IRepoDetails) {
-    log(`Merging ${details.mergeBranchName} to merge master`);
+async function mergeBranchToMergeMaster(git: SimpleGit, destBranch: string, details: IRepoDetails) {
+    log(`Merging ${details.mergeBranchName} to merge ${destBranch}`);
 
     // Switch back to the merge branch 
     log(`Checking out ${destBranch}`);
-    await git.checkout(destBranch).catch(abort(git, `Failed switching to ${destBranch}`));
+    await git.checkout(destBranch);
     let mergeCommitMessage: ICommitDetails = {
         committed: false,
-        message: `Merging changes from ${srcBranch}`
+        message: `Merging changes from ${details.mergeBranchName}`
     };
 
     let commitPerformed = false;
@@ -566,8 +581,7 @@ _theArgs = parseArgs({
     switches: {
         "cloneTo": true,
         "originBranch": true,
-        "originRepo": true,
-        "destBranch": true
+        "originRepo": true
     },
     defaults: {
         values: _theArgs.values,
@@ -592,7 +606,13 @@ localGit.checkIsRepo().then(async (isRepo) => {
         const originRepo = _theArgs.switches.originRepo;
         const originRepoUrl = "https://github.com/" + originRepo;
         const originBranch = _theArgs.switches.originBranch;
-        const workingBranch = _theArgs.switches.destBranch || originBranch;
+
+        let userDetails = await getUser(localGit);
+
+        let workingBranch = userDetails.name + "/" + (originBranch.replace(/\//g, "-"));
+        if (userDetails.name.indexOf(" ") !== -1) {
+            workingBranch = userDetails.user + "/" + (originBranch.replace(/\//g, "-"));
+        }
 
         const mergeGit = await _init(localGit, originRepo, originBranch, workingBranch);
 
@@ -617,7 +637,7 @@ localGit.checkIsRepo().then(async (isRepo) => {
         // Now merge / move each repo into the staging location
         console.log("Now merge repos into main merge staging")
         await processRepos(reposToSyncAndMerge, async (repoName, repoDetails) => {
-            if (await mergeBranchToMergeMaster(mergeGit, repoName, _theArgs.switches.originBranch, repoDetails)) {
+            if (await mergeBranchToMergeMaster(mergeGit, workingBranch, repoDetails)) {
                 prTitle += repoName + "; ";
                 createPr = true;
             }

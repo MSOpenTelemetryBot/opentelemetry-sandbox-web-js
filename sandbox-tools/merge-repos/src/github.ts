@@ -47,12 +47,11 @@ export async function gitHubListForkRepos(gitRoot: string): Promise<GithubRepo[]
     return repos
 }
 
-export async function gitHubCreateForkRepo(gitRoot: string, repoOwner: string, repoName: string) {
+export async function gitHubCreateForkRepo(gitRoot: string, repoToFork: string) {
     let repos = await gitHubListForkRepos(gitRoot);
     let hasRepo = false;
-    let repoWithName = repoOwner + "/" + repoName;
     repos.forEach((repo) => {
-        if (repo.nameWithOwner === repoWithName) {
+        if (repo.nameWithOwner === repoToFork) {
             hasRepo = true;
         }
     });
@@ -62,18 +61,18 @@ export async function gitHubCreateForkRepo(gitRoot: string, repoOwner: string, r
         try {
             process.chdir(path.resolve(gitRoot));
 
-            log(`Creating fork repo of ${repoWithName}...`);
+            log(`Creating fork repo of ${repoToFork}...`);
             await execFile("gh", [
                 "repo",
                 "fork",
-                repoWithName,
+                repoToFork,
                 "--clone=false"
             ]);
         } finally {
             process.chdir(cwd);
         }
     } else {
-        log(`Fork for repo ${repoWithName} already exists...`);
+        log(`Fork for repo ${repoToFork} already exists...`);
     }
 }
 

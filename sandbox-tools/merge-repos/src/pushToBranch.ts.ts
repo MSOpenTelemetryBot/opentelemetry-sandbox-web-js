@@ -15,13 +15,13 @@ export async function pushToBranch(git: SimpleGit) {
             fail(`Origin remote does not exist ${JSON.stringify(remotes, null, 4)}`);
         }
     
-        log(`Pushing changes to - origin/${branchName} => ${remotes.origin.push} for ${status.current}`);
+        log(`Pushing changes to - origin/${branchName} => ${remotes.origin.push} for ${status.current}\n -- Remotes: ${JSON.stringify(await getRemoteList(git), null, 4)}`);
 
         await git.push([
             "-f",
             "--set-upstream",
             "origin",
-            "HEAD:" + branchName
+            branchName
         ]);
 
         // Push the tags as well

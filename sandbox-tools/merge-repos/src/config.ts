@@ -16,7 +16,7 @@ export const MERGE_ORIGIN_MERGE_MAIN_BRANCH = "main";
  * Identifies both the initial source and final destination branch for the merge
  * ie. The created PR will be created to merger back into this branch for the Origin Repo
  */
- export const MERGE_ORIGIN_STAGING_BRANCH = "auto-merge/repo-staging";
+export const MERGE_ORIGIN_STAGING_BRANCH = "auto-merge/repo-staging";
 
 /**
  * Identifies the working repo to use as the destination fork

@@ -3,7 +3,7 @@ import { SimpleGit } from "simple-git";
 import { fail } from "./abort";
 import { createGit } from "./createGit";
 import { addRemoteAndFetch, getRemoteList } from "./remotes";
-import { getUser, setUser } from "./userDetails";
+import { setUser, UserDetails } from "./userDetails";
 import { log } from "./utils";
 
 
@@ -16,7 +16,7 @@ import { log } from "./utils";
  * @param workingLocalBranch - The working local branch name to use
  * @returns A new SimpleGit instance for working with the new local cloned origin repo in the forkDest
  */
-export async function createLocalBranch(git: SimpleGit, forkDest: string, originRepo: string, originBranch: string, workingLocalBranch: string): Promise<SimpleGit> {
+export async function createLocalBranch(git: SimpleGit, forkDest: string, originRepo: string, originBranch: string, destUser: string, repoName: string, workingLocalBranch: string, userDetails: UserDetails): Promise<SimpleGit> {
 
     if (fs.existsSync(forkDest)) {
         log(`Removing previous working dest ${forkDest}`);
@@ -26,23 +26,14 @@ export async function createLocalBranch(git: SimpleGit, forkDest: string, origin
         }
     }
 
-    let userDetails = await getUser(git);
-
-    const repoTokens = originRepo.split("/");
-    if (repoTokens.length !== 2) {
-        fail(git, `${originRepo} must be in the format <owner>/<repo-name>`);
-    }
-
-    const repoName = repoTokens[1];
-
-    let destUser = userDetails.name;
-    if (!destUser || destUser.indexOf(" ") !== -1) {
-        destUser = userDetails.user;
+    const destRepo = destUser + "/" + repoName;
+    let destRepoUrl =  "https://github.com/" + destRepo;
+    let gitHubToken = process.env["GITHUB_TOKEN"];
+    if (gitHubToken) {
+        destRepoUrl = "https://" + gitHubToken + "@github.com/" + destRepo;
     }
 
     const originRepoUrl = "https://github.com/" + originRepo;
-    const destRepo = destUser + "/" + repoName;
-    const destRepoUrl =  "https://github.com/" + destRepo;
 
     if (destRepo === originRepo && originBranch === workingLocalBranch) {
         fail(git, `Unable to continue: The destination repo ${destRepo} and branch ${workingLocalBranch} for the current user ${userDetails.name}\n` +
@@ -69,22 +60,21 @@ export async function createLocalBranch(git: SimpleGit, forkDest: string, origin
     }
 
     // Add the origin remote and fetch so we get all available branches
-    await mergeGit.addRemote("origin", destRepoUrl);
+    await addRemoteAndFetch(mergeGit, "origin", { url: destRepoUrl, branch: null });
 
     log(`Setting upstream repo to ${originRepo}`);
     if (cloneRemotes.upstream) {
         await mergeGit.removeRemote("upstream");
     }
-    await addRemoteAndFetch(mergeGit, "upstream", { url: originRepoUrl, branch: null });
-    //await mergeGit.addRemote("upstream", originRepoUrl);
+    await mergeGit.addRemote("upstream", originRepoUrl);
 
     cloneRemotes = await getRemoteList(mergeGit);
     log(`New Remotes: ${JSON.stringify(cloneRemotes, null, 4)}`);
 
-    log(`Creating new local branch ${workingLocalBranch} from upstream/${originBranch}`);
+    log(`Creating new local branch ${workingLocalBranch} from origin/${originBranch}`);
     await mergeGit.checkout([
-        "-b", workingLocalBranch,
-        "upstream/" + originBranch
+        "-B", workingLocalBranch,
+        "origin/" + originBranch
     ]);
 
     log(`Status ${JSON.stringify(await mergeGit.status(), null, 4)}`);
