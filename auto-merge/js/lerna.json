@@ -3,10 +3,10 @@
   "npmClient": "yarn",
   "packages": [
     "benchmark/*",
-    "examples/*",
-    "packages/*"
+    "packages/*",
+    "packages/opentelemetry-plugin-postgres/*"
   ],
-  "version": "0.2.0",
+  "version": "0.3.0",
   "changelog": {
     "repo": "open-telemetry/opentelemetry-js",
     "labels": {

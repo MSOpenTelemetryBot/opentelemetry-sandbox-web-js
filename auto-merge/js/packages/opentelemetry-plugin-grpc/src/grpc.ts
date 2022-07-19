@@ -51,7 +51,7 @@ let grpcClientModule: GrpcInternalClientTypes;
 
 export class GrpcPlugin extends BasePlugin<grpc> {
   static readonly component = 'grpc';
-  readonly supportedVersions = ['^1.23.3'];
+  readonly supportedVersions = ['1.*'];
 
   protected _config!: GrpcPluginOptions;
 
@@ -83,13 +83,11 @@ export class GrpcPlugin extends BasePlugin<grpc> {
     }
 
     // Wrap the externally exported client constructor
-    if (this._moduleExports.makeGenericClientConstructor) {
-      shimmer.wrap(
-        this._moduleExports,
-        'makeGenericClientConstructor',
-        this._patchClient()
-      );
-    }
+    shimmer.wrap(
+      this._moduleExports,
+      'makeGenericClientConstructor',
+      this._patchClient()
+    );
 
     if (this._internalFilesExports['client']) {
       grpcClientModule = this._internalFilesExports[
@@ -117,9 +115,7 @@ export class GrpcPlugin extends BasePlugin<grpc> {
       shimmer.unwrap(this._moduleExports.Server.prototype, 'register');
     }
 
-    if (this._moduleExports.makeGenericClientConstructor) {
-      shimmer.unwrap(this._moduleExports, 'makeGenericClientConstructor');
-    }
+    shimmer.unwrap(this._moduleExports, 'makeGenericClientConstructor');
 
     if (grpcClientModule) {
       shimmer.unwrap(grpcClientModule, 'makeClientConstructor');
@@ -176,10 +172,9 @@ export class GrpcPlugin extends BasePlugin<grpc> {
               const self = this;
 
               const spanName = `grpc.${name.replace('/', '')}`;
-              const parentSpan = plugin._getSpanContext(call.metadata);
               const spanOptions: SpanOptions = {
                 kind: SpanKind.SERVER,
-                parent: parentSpan || undefined,
+                parent: plugin._getSpanContext(call.metadata),
               };
 
               plugin._logger.debug(
@@ -351,16 +346,18 @@ export class GrpcPlugin extends BasePlugin<grpc> {
       return function clientMethodTrace(this: grpcTypes.Client) {
         const name = `grpc.${original.path.replace('/', '')}`;
         const args = Array.prototype.slice.call(arguments);
-        const currentSpan = plugin._tracer.getCurrentSpan();
         const span = plugin._tracer
           .startSpan(name, {
             kind: SpanKind.CLIENT,
-            parent: currentSpan || undefined,
+            parent: plugin._tracer.getCurrentSpan(),
           })
           .setAttribute(AttributeNames.COMPONENT, GrpcPlugin.component);
-        return plugin._makeGrpcClientRemoteCall(original, args, this, plugin)(
-          span
-        );
+        return plugin._makeGrpcClientRemoteCall(
+          original,
+          args,
+          this,
+          plugin
+        )(span);
       };
     };
   }

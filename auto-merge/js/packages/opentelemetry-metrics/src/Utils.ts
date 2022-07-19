@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-const COMMA_SEPARATOR = ',';
-
 /**
- * Returns a string(comma separated) from the list of label values.
+ * Type guard to remove nulls from arrays
  *
- * @param labelValues The list of the label values.
- * @returns The hashed label values string.
+ * @param value value to be checked for null equality
  */
-export function hashLabelValues(labelValues: string[]): string {
-  return labelValues.sort().join(COMMA_SEPARATOR);
+export function notNull<T>(value: T | null): value is T {
+  return value !== null;
 }

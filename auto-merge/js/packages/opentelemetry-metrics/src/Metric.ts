@@ -16,7 +16,6 @@
 
 import * as types from '@opentelemetry/types';
 import { hrTime } from '@opentelemetry/core';
-import { hashLabelValues } from './Utils';
 import { CounterHandle, GaugeHandle, BaseHandle } from './Handle';
 import { MetricOptions } from './types';
 import {
@@ -47,17 +46,17 @@ export abstract class Metric<T extends BaseHandle> implements types.Metric<T> {
   }
 
   /**
-   * Returns a Handle associated with specified label values.
+   * Returns a Handle associated with specified LabelSet.
    * It is recommended to keep a reference to the Handle instead of always
    * calling this method for each operation.
-   * @param labelValues the list of label values.
+   * @param labelSet the canonicalized LabelSet used to associate with this metric handle.
    */
-  getHandle(labelValues: string[]): T {
-    const hash = hashLabelValues(labelValues);
-    if (this._handles.has(hash)) return this._handles.get(hash)!;
+  getHandle(labelSet: types.LabelSet): T {
+    if (this._handles.has(labelSet.identifier))
+      return this._handles.get(labelSet.identifier)!;
 
-    const handle = this._makeHandle(labelValues);
-    this._handles.set(hash, handle);
+    const handle = this._makeHandle(labelSet);
+    this._handles.set(labelSet.identifier, handle);
     return handle;
   }
 
@@ -72,10 +71,10 @@ export abstract class Metric<T extends BaseHandle> implements types.Metric<T> {
 
   /**
    * Removes the Handle from the metric, if it is present.
-   * @param labelValues the list of label values.
+   * @param labelSet the canonicalized LabelSet used to associate with this metric handle.
    */
-  removeHandle(labelValues: string[]): void {
-    this._handles.delete(hashLabelValues(labelValues));
+  removeHandle(labelSet: types.LabelSet): void {
+    this._handles.delete(labelSet.identifier);
   }
 
   /**
@@ -115,15 +114,21 @@ export abstract class Metric<T extends BaseHandle> implements types.Metric<T> {
       unit: this._options.unit,
       labelKeys: this._options.labelKeys,
       type: this._type,
+      monotonic: this._monotonic,
     };
   }
 
-  protected abstract _makeHandle(labelValues: string[]): T;
+  protected abstract _makeHandle(labelSet: types.LabelSet): T;
 }
 
 /** This is a SDK implementation of Counter Metric. */
-export class CounterMetric extends Metric<CounterHandle> {
-  constructor(name: string, options: MetricOptions) {
+export class CounterMetric extends Metric<CounterHandle>
+  implements Pick<types.MetricUtils, 'add'> {
+  constructor(
+    name: string,
+    options: MetricOptions,
+    private readonly _onUpdate: Function
+  ) {
     super(
       name,
       options,
@@ -132,20 +137,35 @@ export class CounterMetric extends Metric<CounterHandle> {
         : MetricDescriptorType.COUNTER_INT64
     );
   }
-  protected _makeHandle(labelValues: string[]): CounterHandle {
+  protected _makeHandle(labelSet: types.LabelSet): CounterHandle {
     return new CounterHandle(
+      labelSet,
       this._disabled,
       this._monotonic,
       this._valueType,
-      labelValues,
-      this._logger
+      this._logger,
+      this._onUpdate
     );
+  }
+
+  /**
+   * Adds the given value to the current value. Values cannot be negative.
+   * @param value the value to add.
+   * @param labelSet the canonicalized LabelSet used to associate with this metric's handle.
+   */
+  add(value: number, labelSet: types.LabelSet) {
+    this.getHandle(labelSet).add(value);
   }
 }
 
 /** This is a SDK implementation of Gauge Metric. */
-export class GaugeMetric extends Metric<GaugeHandle> {
-  constructor(name: string, options: MetricOptions) {
+export class GaugeMetric extends Metric<GaugeHandle>
+  implements Pick<types.MetricUtils, 'set'> {
+  constructor(
+    name: string,
+    options: MetricOptions,
+    private readonly _onUpdate: Function
+  ) {
     super(
       name,
       options,
@@ -154,13 +174,23 @@ export class GaugeMetric extends Metric<GaugeHandle> {
         : MetricDescriptorType.GAUGE_INT64
     );
   }
-  protected _makeHandle(labelValues: string[]): GaugeHandle {
+  protected _makeHandle(labelSet: types.LabelSet): GaugeHandle {
     return new GaugeHandle(
+      labelSet,
       this._disabled,
       this._monotonic,
       this._valueType,
-      labelValues,
-      this._logger
+      this._logger,
+      this._onUpdate
     );
+  }
+
+  /**
+   * Sets the given value. Values can be negative.
+   * @param value the new value.
+   * @param labelSet the canonicalized LabelSet used to associate with this metric's handle.
+   */
+  set(value: number, labelSet: types.LabelSet) {
+    this.getHandle(labelSet).set(value);
   }
 }
