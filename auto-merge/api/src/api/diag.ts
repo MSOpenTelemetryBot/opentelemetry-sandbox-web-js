@@ -14,56 +14,30 @@
  * limitations under the License.
  */
 
+import { createLogLevelDiagLogger } from '../diag/internal/logLevelLogger';
+import { DiagLogFunction, DiagLogger, DiagLogLevel } from '../diag/types';
 import {
-  DiagLogger,
-  DiagLogFunction,
-  createNoopDiagLogger,
-  diagLoggerFunctions,
-} from '../diag/logger';
-import { DiagLogLevel, createLogLevelDiagLogger } from '../diag/logLevel';
-import {
-  API_BACKWARDS_COMPATIBILITY_VERSION,
-  GLOBAL_DIAG_LOGGER_API_KEY,
-  makeGetter,
-  _global,
-} from './global-utils';
+  getGlobal,
+  registerGlobal,
+  unregisterGlobal,
+} from '../internal/global-utils';
 
-/** Internal simple Noop Diag API that returns a noop logger and does not allow any changes */
-function noopDiagApi(): DiagAPI {
-  const noopApi = createNoopDiagLogger() as DiagAPI;
-
-  noopApi.getLogger = () => noopApi;
-  noopApi.setLogger = noopApi.getLogger;
-  noopApi.setLogLevel = () => {};
-
-  return noopApi;
-}
+const API_NAME = 'diag';
 
 /**
  * Singleton object which represents the entry point to the OpenTelemetry internal
  * diagnostic API
  */
 export class DiagAPI implements DiagLogger {
+  private static _instance?: DiagAPI;
+
   /** Get the singleton instance of the DiagAPI API */
   public static instance(): DiagAPI {
-    let theInst = null;
-    if (_global[GLOBAL_DIAG_LOGGER_API_KEY]) {
-      // Looks like a previous instance was set, so try and fetch it
-      theInst = _global[GLOBAL_DIAG_LOGGER_API_KEY]?.(
-        API_BACKWARDS_COMPATIBILITY_VERSION
-      ) as DiagAPI;
+    if (!this._instance) {
+      this._instance = new DiagAPI();
     }
 
-    if (!theInst) {
-      theInst = new DiagAPI();
-      _global[GLOBAL_DIAG_LOGGER_API_KEY] = makeGetter(
-        API_BACKWARDS_COMPATIBILITY_VERSION,
-        theInst,
-        noopDiagApi()
-      );
-    }
-
-    return theInst;
+    return this._instance;
   }
 
   /**
@@ -71,21 +45,17 @@ export class DiagAPI implements DiagLogger {
    * @private
    */
   private constructor() {
-    let _logLevel: DiagLogLevel = DiagLogLevel.INFO;
-    let _filteredLogger: DiagLogger | null;
-    let _logger: DiagLogger = createNoopDiagLogger();
-
     function _logProxy(funcName: keyof DiagLogger): DiagLogFunction {
       return function () {
-        const orgArguments = arguments as unknown;
-        const theLogger = _filteredLogger || _logger;
-        const theFunc = theLogger[funcName];
-        if (typeof theFunc === 'function') {
-          return theFunc.apply(
-            theLogger,
-            orgArguments as Parameters<DiagLogFunction>
-          );
-        }
+        const logger = getGlobal('diag');
+        // shortcut if logger not set
+        if (!logger) return;
+        return logger[funcName].apply(
+          logger,
+          // work around Function.prototype.apply types
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          arguments as any
+        );
       };
     }
 
@@ -94,52 +64,44 @@ export class DiagAPI implements DiagLogger {
 
     // DiagAPI specific functions
 
-    self.getLogger = (): DiagLogger => {
-      // Return itself if no existing logger is defined (defaults effectively to a Noop)
-      return _logger;
-    };
-
-    self.setLogger = (logger?: DiagLogger): DiagLogger => {
-      const prevLogger = _logger;
-      if (!logger || logger !== self) {
-        // Simple special case to avoid any possible infinite recursion on the logging functions
-        _logger = logger || createNoopDiagLogger();
-        _filteredLogger = createLogLevelDiagLogger(_logLevel, _logger);
+    self.setLogger = (
+      logger: DiagLogger,
+      logLevel: DiagLogLevel = DiagLogLevel.INFO
+    ) => {
+      if (logger === self) {
+        // There isn't much we can do here.
+        // Logging to the console might break the user application.
+        // Try to log to self. If a logger was previously registered it will receive the log.
+        const err = new Error(
+          'Cannot use diag as the logger for itself. Please use a DiagLogger implementation like ConsoleDiagLogger or a custom implementation'
+        );
+        self.error(err.stack ?? err.message);
+        return;
       }
 
-      return prevLogger;
+      registerGlobal('diag', createLogLevelDiagLogger(logLevel, logger), true);
     };
 
-    self.setLogLevel = (maxLogLevel: DiagLogLevel) => {
-      if (maxLogLevel !== _logLevel) {
-        _logLevel = maxLogLevel;
-        if (_logger) {
-          _filteredLogger = createLogLevelDiagLogger(maxLogLevel, _logger);
-        }
-      }
+    self.disable = () => {
+      unregisterGlobal(API_NAME);
     };
 
-    for (let i = 0; i < diagLoggerFunctions.length; i++) {
-      const name = diagLoggerFunctions[i];
-      self[name] = _logProxy(name);
-    }
+    self.verbose = _logProxy('verbose');
+    self.debug = _logProxy('debug');
+    self.info = _logProxy('info');
+    self.warn = _logProxy('warn');
+    self.error = _logProxy('error');
   }
 
   /**
-   * Return the currently configured logger instance, if no logger has been configured
-   * it will return itself so any log level filtering will still be applied in this case.
-   */
-  public getLogger!: () => DiagLogger;
-
-  /**
-   * Set the DiagLogger instance
-   * @param logger - [Optional] The DiagLogger instance to set as the default logger, if not provided it will set it back as a noop
+   * Set the global DiagLogger and DiagLogLevel.
+   * If a global diag logger is already set, this will override it.
+   *
+   * @param logger - [Optional] The DiagLogger instance to set as the default logger.
+   * @param logLevel - [Optional] The DiagLogLevel used to filter logs sent to the logger. If not provided it will default to INFO.
    * @returns The previously registered DiagLogger
    */
-  public setLogger!: (logger?: DiagLogger) => DiagLogger;
-
-  /** Set the default maximum diagnostic logging level */
-  public setLogLevel!: (maxLogLevel: DiagLogLevel) => void;
+  public setLogger!: (logger: DiagLogger, logLevel?: DiagLogLevel) => void;
 
   // DiagLogger implementation
   public verbose!: DiagLogFunction;
@@ -147,4 +109,9 @@ export class DiagAPI implements DiagLogger {
   public info!: DiagLogFunction;
   public warn!: DiagLogFunction;
   public error!: DiagLogFunction;
+
+  /**
+   * Unregister the global logger and return to Noop
+   */
+  public disable!: () => void;
 }

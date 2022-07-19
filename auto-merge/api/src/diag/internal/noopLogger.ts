@@ -14,6 +14,21 @@
  * limitations under the License.
  */
 
-export { createContextKey, ROOT_CONTEXT } from './context';
-export * from './NoopContextManager';
-export * from './types';
+import { DiagLogger } from '../types';
+
+function noopLogFunction() {}
+
+/**
+ * Returns a No-Op Diagnostic logger where all messages do nothing.
+ * @implements {@link DiagLogger}
+ * @returns {DiagLogger}
+ */
+export function createNoopDiagLogger(): DiagLogger {
+  return {
+    verbose: noopLogFunction,
+    debug: noopLogFunction,
+    info: noopLogFunction,
+    warn: noopLogFunction,
+    error: noopLogFunction,
+  };
+}
